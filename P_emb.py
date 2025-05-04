@@ -1,31 +1,58 @@
 import array
-import math
+import struct
 from machine import mem32
 
-N = 0; Xn = 2; a=0;b=0;c=0;d=0;e=0;f=0;g=0;h=0;
-print('Ingrese valores de P0,P1,P2 y P3',a,b,c,d,e,f,g,h);
+print("Ingrese el número de puntos (N):")
+N = int(input())  
 
-P[0] = array.array('l', [a, b])
-dir1 = mem32(P[0])
-P[1] = array.array('l', [c, d])
-dir2 = mem32(P[0] & 0x4)
-P[2] = array.array('l', [e, f])
-dir3 = mem32(P[0] & 0x8)
-P[3] = array.array('l', [g, h])   # dir4 = mem32(cod4 0x12)
-dir4 = mem32(P[0] & 0x12)
-LR = [0]*N
+def float_to_u32(f): return struct.unpack('<I', struct.pack('<f', f))[0]
 
-def lista_retornada():
+def u32_to_float(u): return struct.unpack('<f', struct.pack('<I', u))[0]
+
+direcciones = [0x20000000, 0x20000008, 0x20000010, 0x20000018]  
+dir_curva = 0x20001000  
+
+print("Ingrese las 4 coordenadas (x y) de los puntos de control:")
+P = []  
+for i in range(4):
+    while True:
+        try:
+            xs, ys = input(f"P{i} (x y): ").split()
+            P.append((float(xs), float(ys)))
+            break
+        except ValueError:
+            print("Error: ingrese dos números separados por espacio.")
+
+for idx, (x, y) in enumerate(P):
+    base = direcciones[idx]
+    mem32[base]     = float_to_u32(x)
+    mem32[base + 4] = float_to_u32(y)
+
+LR = array.array('f', [0.0] * (2 * N))
+
+def lista_retornada():  # Renombrada función de cálculo
+    if N <= 0:
+        return
     for i in range(N):
-        t = i / M
-        if (t == 0):
-            LR[i] = (1 - t)*(1-t) * P0[0] + LR[i]
-        if (t == 1):
-            LR[i] = t ** N-1 * 0.3 + LR[i]
-    LR[M] = (1 - t) * (3 - t) * t ** 2 * 0.6 * c * t * P[Xn] + LR[i]
-    
-    if (Xn == 3):
-        Xn = 2
+        t = i / (N - 1) if N > 1 else 0.0
+        u = 1 - t
+        xs = [u32_to_float(mem32[d]) for d in direcciones]
+        ys = [u32_to_float(mem32[d+4]) for d in direcciones]
+        b0, b1, b2, b3 = u**3, 3*u**2*t, 3*u*t**2, t**3
+        x = b0*xs[0] + b1*xs[1] + b2*xs[2] + b3*xs[3]
+        y = b0*ys[0] + b1*ys[1] + b2*ys[2] + b3*ys[3]
+        LR[2*i], LR[2*i+1] = x, y
+        b_lr = dir_curva + i*8
+        mem32[b_lr]     = float_to_u32(x)
+        mem32[b_lr + 4] = float_to_u32(y)
 
-    Xa = Xn + 1
-    print(LR[M])
+
+lista_retornada()
+
+print("\nPuntos calculados:")
+for i in range(N):
+    print(f"P{i}: ({LR[2*i]:.2f}, {LR[2*i+1]:.2f})")
+
+
+
+
